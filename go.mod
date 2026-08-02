@@ -2,7 +2,7 @@ module github.com/MontFerret/ferret-js
 
 go 1.25.0
 
-require github.com/MontFerret/ferret/v2 v2.0.0-alpha.34
+require github.com/MontFerret/ferret/v2 v2.0.0-alpha.41
 
 require (
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect

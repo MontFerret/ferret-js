@@ -2,7 +2,7 @@ module github.com/MontFerret/ferret-js
 
 go 1.25.0
 
-require github.com/MontFerret/ferret/v2 v2.0.0-alpha.34
+require github.com/MontFerret/ferret/v2 v2.0.0-alpha.45
 
 require (
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
@@ -13,7 +13,6 @@ require (
 	github.com/rs/zerolog v1.35.1 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
-	github.com/wI2L/jettison v0.7.4 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/sys v0.45.0 // indirect
 )

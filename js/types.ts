@@ -3,6 +3,47 @@ export type Params = Record<string, unknown>;
 export type RuntimeFunction = (
     ...args: unknown[]
 ) => unknown | Promise<unknown>;
+export type MaybePromise<T> = T | PromiseLike<T>;
+
+export interface CompileSource {
+    readonly name: string;
+    readonly text: string;
+}
+
+export interface CompileEvent {
+    readonly source: Readonly<CompileSource>;
+}
+
+export interface CompileResultEvent extends CompileEvent {
+    readonly error?: unknown;
+}
+
+export interface PlanEvent {}
+
+export interface RunEvent {}
+
+export interface RunResultEvent extends RunEvent {
+    readonly error?: unknown;
+}
+
+export interface SessionEvent {}
+
+export interface ModuleLifecycle {
+    onInit?(): MaybePromise<void>;
+    onClose?(): MaybePromise<void>;
+    beforeCompile?(event: CompileEvent): MaybePromise<void>;
+    afterCompile?(event: CompileResultEvent): MaybePromise<void>;
+    onPlanClose?(event: PlanEvent): MaybePromise<void>;
+    beforeRun?(event: RunEvent): MaybePromise<void>;
+    afterRun?(event: RunResultEvent): MaybePromise<void>;
+    onSessionClose?(event: SessionEvent): MaybePromise<void>;
+}
+
+export interface ModuleDefinition {
+    readonly name: string;
+    readonly functions?: Readonly<Record<string, RuntimeFunction>>;
+    readonly lifecycle?: Readonly<ModuleLifecycle>;
+}
 
 export interface HTTPOptions {
     allowLocalhost?: boolean;
@@ -11,6 +52,7 @@ export interface HTTPOptions {
 export interface CreateOptions {
     wasm?: string | URL | ArrayBuffer | Uint8Array | WebAssembly.Module;
     functions?: Record<string, RuntimeFunction>;
+    modules?: readonly ModuleDefinition[];
     http?: HTTPOptions;
 }
 

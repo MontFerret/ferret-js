@@ -39,4 +39,5 @@ func main() {
 	bridges.Set(token, bridge.JSValue())
 
 	<-done
+	bridge.Release()
 }

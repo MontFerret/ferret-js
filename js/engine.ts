@@ -1,5 +1,5 @@
-import type { BridgeResult, CompileResult, GoBridge } from './bridge';
-import { unwrap } from './bridge';
+import type { CompileResult, GoBridge } from './bridge';
+import { callBridge, unwrap } from './bridge';
 import type {
     CompileOptions,
     Engine,
@@ -12,28 +12,6 @@ import type {
     SourceInput,
     Version,
 } from './types';
-
-function callBridge<T>(
-    start: (
-        callback: (result: BridgeResult<T>) => void,
-    ) => BridgeResult<undefined>,
-): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-        const callback = (result: BridgeResult<T>): void => {
-            try {
-                resolve(unwrap(result));
-            } catch (error) {
-                reject(error);
-            }
-        };
-
-        try {
-            unwrap(start(callback));
-        } catch (error) {
-            reject(error);
-        }
-    });
-}
 
 function normalizeSource(source: SourceInput): { name: string; text: string } {
     if (typeof source === 'string') {
@@ -86,6 +64,7 @@ export class SessionImpl implements Session {
     readonly #id: string;
     readonly #owner: PlanImpl;
     #closed = false;
+    #closing = false;
     #running = false;
 
     /** @internal */
@@ -100,6 +79,11 @@ export class SessionImpl implements Session {
         return this.#running;
     }
 
+    /** @internal */
+    get closing(): boolean {
+        return this.#closing;
+    }
+
     get closed(): boolean {
         return this.#closed;
     }
@@ -107,6 +91,10 @@ export class SessionImpl implements Session {
     async run<T = unknown>(options: SessionRunOptions = {}): Promise<T> {
         if (this.#closed) {
             throw new Error('Session is closed');
+        }
+
+        if (this.#closing) {
+            throw new Error('Session is closing');
         }
 
         if (this.#running) {
@@ -138,14 +126,31 @@ export class SessionImpl implements Session {
             return;
         }
 
+        if (this.#closing) {
+            throw new Error('Session is closing');
+        }
+
         if (this.#running) {
             throw new Error('Cannot close a running session');
         }
 
-        unwrap(this.#bridge.closeSession(this.#id));
+        this.#closing = true;
+        let accepted = false;
 
-        this.#closed = true;
-        this.#owner.removeSession(this);
+        try {
+            await callBridge((callback) => {
+                const result = this.#bridge.closeSession(this.#id, callback);
+                accepted = result?.ok === true;
+                return result;
+            });
+        } finally {
+            this.#closing = false;
+
+            if (accepted) {
+                this.#closed = true;
+                this.#owner.removeSession(this);
+            }
+        }
     }
 }
 
@@ -156,6 +161,7 @@ export class PlanImpl implements Plan {
     readonly #sessions = new Set<SessionImpl>();
     readonly params: readonly string[];
     #closed = false;
+    #closing = false;
     #pendingSessionCreations = 0;
 
     /** @internal */
@@ -187,6 +193,22 @@ export class PlanImpl implements Plan {
         return this.#pendingSessionCreations > 0;
     }
 
+    /** @internal */
+    get hasClosingSession(): boolean {
+        for (const session of this.#sessions) {
+            if (session.closing) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @internal */
+    get closing(): boolean {
+        return this.#closing;
+    }
+
     get closed(): boolean {
         return this.#closed;
     }
@@ -199,6 +221,10 @@ export class PlanImpl implements Plan {
     async createSession(options: SessionOptions = {}): Promise<SessionImpl> {
         if (this.#closed) {
             throw new Error('Plan is closed');
+        }
+
+        if (this.#closing) {
+            throw new Error('Plan is closing');
         }
 
         if (
@@ -251,6 +277,10 @@ export class PlanImpl implements Plan {
             return;
         }
 
+        if (this.#closing) {
+            throw new Error('Plan is closing');
+        }
+
         if (this.hasPendingSessionCreation) {
             throw new Error('Cannot close a plan while creating a session');
         }
@@ -259,14 +289,42 @@ export class PlanImpl implements Plan {
             throw new Error('Cannot close a plan with a running session');
         }
 
-        for (const session of [...this.#sessions]) {
-            await session.close();
+        if (this.hasClosingSession) {
+            throw new Error('Cannot close a plan with a closing session');
         }
 
-        unwrap(this.#bridge.closePlan(this.#id));
+        this.#closing = true;
+        const errors: unknown[] = [];
+        let accepted = false;
 
-        this.#closed = true;
-        this.#owner.removePlan(this);
+        try {
+            for (const session of [...this.#sessions]) {
+                try {
+                    await session.close();
+                } catch (error) {
+                    errors.push(error);
+                }
+            }
+
+            try {
+                await callBridge((callback) => {
+                    const result = this.#bridge.closePlan(this.#id, callback);
+                    accepted = result?.ok === true;
+                    return result;
+                });
+            } catch (error) {
+                errors.push(error);
+            }
+        } finally {
+            this.#closing = false;
+
+            if (accepted) {
+                this.#closed = true;
+                this.#owner.removePlan(this);
+            }
+        }
+
+        throwCloseErrors(errors, 'Plan cleanup failed');
     }
 }
 
@@ -276,6 +334,7 @@ export class EngineImpl implements Engine {
     readonly #plans = new Set<PlanImpl>();
     readonly version: Readonly<Version>;
     #closed = false;
+    #closing = false;
     #pendingCompilations = 0;
 
     /** @internal */
@@ -304,6 +363,10 @@ export class EngineImpl implements Engine {
     ): Promise<PlanImpl> {
         if (this.#closed) {
             throw new Error('Engine is closed');
+        }
+
+        if (this.#closing) {
+            throw new Error('Engine is closing');
         }
 
         if (options == null || typeof options !== 'object') {
@@ -355,11 +418,19 @@ export class EngineImpl implements Engine {
             return;
         }
 
+        if (this.#closing) {
+            throw new Error('Engine is closing');
+        }
+
         if (this.#pendingCompilations > 0) {
             throw new Error('Cannot close an engine while compiling a plan');
         }
 
         for (const plan of this.#plans) {
+            if (plan.closing) {
+                throw new Error('Cannot close an engine with a closing plan');
+            }
+
             if (plan.hasPendingSessionCreation) {
                 throw new Error(
                     'Cannot close an engine while creating a session',
@@ -371,17 +442,62 @@ export class EngineImpl implements Engine {
                     'Cannot close an engine with a running session',
                 );
             }
+
+            if (plan.hasClosingSession) {
+                throw new Error(
+                    'Cannot close an engine with a closing session',
+                );
+            }
         }
 
-        for (const plan of [...this.#plans]) {
-            await plan.close();
+        this.#closing = true;
+        const errors: unknown[] = [];
+        let accepted = false;
+
+        try {
+            for (const plan of [...this.#plans]) {
+                try {
+                    await plan.close();
+                } catch (error) {
+                    errors.push(error);
+                }
+            }
+
+            try {
+                await callBridge((callback) => {
+                    const result = this.#bridge.closeEngine(callback);
+                    accepted = result?.ok === true;
+                    return result;
+                });
+            } catch (error) {
+                errors.push(error);
+            }
+
+            if (accepted) {
+                this.#closed = true;
+
+                try {
+                    unwrap(this.#bridge.shutdown());
+                    await this.#runtimeDone;
+                } catch (error) {
+                    errors.push(error);
+                }
+            }
+        } finally {
+            this.#closing = false;
         }
 
-        unwrap(this.#bridge.closeEngine());
-        this.#closed = true;
+        throwCloseErrors(errors, 'Engine cleanup failed');
+    }
+}
 
-        unwrap(this.#bridge.shutdown());
-        await this.#runtimeDone;
+function throwCloseErrors(errors: unknown[], message: string): void {
+    if (errors.length === 1) {
+        throw errors[0];
+    }
+
+    if (errors.length > 1) {
+        throw new AggregateError(errors, message);
     }
 }
 

@@ -27,7 +27,7 @@ const engine = await create();
 
 try {
     const result = await engine.run(
-        `FOR value IN 1..3 RETURN value * @factor`,
+        `RETURN (FOR value IN 1..3 RETURN value * @factor)`,
         { params: { factor: 2 } },
     );
 
@@ -47,7 +47,8 @@ const { create } = require('@montferret/ferret');
 
 Ferret JS has three explicit runtime objects:
 
-- `Engine` owns the Ferret runtime and registered JavaScript functions.
+- `Engine` owns the Ferret runtime, registered JavaScript functions, and
+  modules.
 - `Plan` is a compiled Ferret program that can be reused.
 - `Session` is an execution context with captured parameters.
 
@@ -95,6 +96,52 @@ try {
     await engine.close();
 }
 ```
+
+## Modules and lifecycle hooks
+
+Use `defineModule()` when JavaScript functions need to participate in the
+Ferret engine, plan, or session lifecycle. Modules are registered when the
+engine is created and cannot be added, removed, or changed afterward.
+
+```javascript
+import { create, defineModule } from '@montferret/ferret';
+
+const logger = defineModule({
+    name: 'logger',
+    functions: {
+        log: (value) => console.log(value),
+    },
+    lifecycle: {
+        onInit() {
+            console.log('engine initialized');
+        },
+        beforeRun() {
+            console.log('running Ferret');
+        },
+    },
+});
+
+const engine = await create({
+    modules: [logger],
+});
+```
+
+Modules can define engine hooks (`onInit`, `onClose`), plan hooks
+(`beforeCompile`, `afterCompile`, `onPlanClose`), and session hooks
+(`beforeRun`, `afterRun`, `onSessionClose`). Every callback may return normally
+or return a promise; Ferret waits for asynchronous callbacks and propagates
+thrown or rejected errors to the corresponding `create()`, `compile()`,
+`run()`, or `close()` promise.
+
+Compile callbacks receive the normalized source. The `afterCompile` and
+`afterRun` events also contain an `error` when the underlying operation failed.
+Hook ordering follows Ferret Core: initialization and before hooks run in module
+registration order, while after and close hooks run in reverse order.
+
+The `functions` option remains the simpler shorthand when lifecycle callbacks
+are not needed, and it can be used together with modules. Module names identify
+registrations but do not namespace their functions; Ferret function names
+remain case-insensitive.
 
 ## Values
 

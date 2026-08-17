@@ -6,6 +6,9 @@
 
 - Added an explicit `http.allowLocalhost` engine option for trusted loopback
   access while preserving Ferret's secure HTTP defaults.
+- Added declarative JavaScript modules through `defineModule()` and
+  `create({ modules })`, including asynchronous engine, plan, and session
+  lifecycle hooks.
 
 ### Changed
 
@@ -16,6 +19,8 @@
   JavaScript/WASM boundary.
 - Added cancellation options for compilation and session creation.
 - Exposed synchronous `closed` metadata on engines, plans, and sessions.
+- Unified legacy `create({ functions })` registration with the Ferret module
+  bootstrap path while keeping the public shorthand backward-compatible.
 
 ## 2.0.0-alpha.1
 

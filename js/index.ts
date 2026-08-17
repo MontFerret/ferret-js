@@ -2,6 +2,8 @@ import { createWithPlatform, type Platform } from './factory';
 import { createBrowserHTTPTransport } from './browser_http';
 import type { CreateOptions } from './types';
 
+export { defineModule } from './module';
+
 const moduleURL = import.meta.url;
 const platform: Platform = {
     defaultWasm: new URL('./ferret.wasm', moduleURL),
@@ -39,15 +41,25 @@ export function create(options?: CreateOptions) {
 }
 
 export type {
+    CompileEvent,
     CompileOptions,
+    CompileResultEvent,
+    CompileSource,
     CreateOptions,
     Engine,
     ExecutionOptions,
     HTTPOptions,
+    MaybePromise,
+    ModuleDefinition,
+    ModuleLifecycle,
     Params,
     Plan,
+    PlanEvent,
+    RunEvent,
+    RunResultEvent,
     RuntimeFunction,
     Session,
+    SessionEvent,
     SessionOptions,
     SessionRunOptions,
     SourceInput,

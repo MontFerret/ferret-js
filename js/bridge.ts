@@ -1,4 +1,4 @@
-import type { RuntimeFunction, Version } from './types';
+import type { ModuleDefinition, RuntimeFunction, Version } from './types';
 import type { HTTPTransport } from './http';
 
 export interface BridgeError {
@@ -20,8 +20,10 @@ export interface CompileResult {
 export interface GoBridge {
     initialize(
         functions: Record<string, RuntimeFunction>,
+        modules: readonly ModuleDefinition[],
         allowLocalhost: boolean,
         transport: HTTPTransport,
+        callback: (result: BridgeResult<undefined>) => void,
     ): BridgeResult<undefined>;
     version(): BridgeResult<Version>;
     compile(
@@ -41,9 +43,17 @@ export interface GoBridge {
         signal: AbortSignal | undefined,
         callback: (result: BridgeResult<string>) => void,
     ): BridgeResult<undefined>;
-    closeSession(sessionId: string): BridgeResult<undefined>;
-    closePlan(planId: string): BridgeResult<undefined>;
-    closeEngine(): BridgeResult<undefined>;
+    closeSession(
+        sessionId: string,
+        callback: (result: BridgeResult<undefined>) => void,
+    ): BridgeResult<undefined>;
+    closePlan(
+        planId: string,
+        callback: (result: BridgeResult<undefined>) => void,
+    ): BridgeResult<undefined>;
+    closeEngine(
+        callback: (result: BridgeResult<undefined>) => void,
+    ): BridgeResult<undefined>;
     shutdown(): BridgeResult<undefined>;
 }
 
@@ -75,4 +85,27 @@ export function unwrap<T>(result: BridgeResult<T>): T {
         error.name = 'AbortError';
     }
     throw error;
+}
+
+/** @internal */
+export function callBridge<T>(
+    start: (
+        callback: (result: BridgeResult<T>) => void,
+    ) => BridgeResult<undefined>,
+): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const callback = (result: BridgeResult<T>): void => {
+            try {
+                resolve(unwrap(result));
+            } catch (error) {
+                reject(error);
+            }
+        };
+
+        try {
+            unwrap(start(callback));
+        } catch (error) {
+            reject(error);
+        }
+    });
 }

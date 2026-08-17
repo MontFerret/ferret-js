@@ -4,9 +4,10 @@ import type {
     GoRuntime,
     GoRuntimeConstructor,
 } from './bridge';
-import { unwrap } from './bridge';
+import { callBridge, unwrap } from './bridge';
 import { EngineImpl } from './engine';
 import type { HTTPTransport } from './http';
+import { snapshotModules } from './module';
 import type { CreateOptions, Engine } from './types';
 
 export interface Platform {
@@ -31,6 +32,8 @@ export async function createWithPlatform(
         throw new TypeError('functions must be a plain JavaScript object');
     }
 
+    const modules = snapshotModules(options.modules);
+
     if (options.http !== undefined && !isPlainObject(options.http)) {
         throw new TypeError('http must be a plain JavaScript object');
     }
@@ -45,7 +48,13 @@ export async function createWithPlatform(
     const transport = platform.createHTTPTransport();
 
     try {
-        return await startEngine(platform, runtimeURL, options, transport);
+        return await startEngine(
+            platform,
+            runtimeURL,
+            options,
+            modules,
+            transport,
+        );
     } catch (error) {
         transport.close();
         throw error;
@@ -56,6 +65,7 @@ async function startEngine(
     platform: Platform,
     runtimeURL: URL,
     options: CreateOptions,
+    modules: ReturnType<typeof snapshotModules>,
     transport: HTTPTransport,
 ): Promise<Engine> {
     await platform.prepare(runtimeURL);
@@ -91,14 +101,21 @@ async function startEngine(
 
     try {
         bridge = await waitForBridge(globals, token, runtimeDone);
-        unwrap(
-            bridge.initialize(
+        const currentBridge = bridge;
+        await callBridge((callback) =>
+            currentBridge.initialize(
                 options.functions ?? {},
+                modules,
                 options.http?.allowLocalhost ?? false,
                 transport,
+                callback,
             ),
         );
-        engine = new EngineImpl(bridge, runtimeDone, unwrap(bridge.version()));
+        engine = new EngineImpl(
+            currentBridge,
+            runtimeDone,
+            unwrap(currentBridge.version()),
+        );
         delete globals.__ferretWasmBridges?.[token];
     } catch (error) {
         const candidate = bridge ?? globals.__ferretWasmBridges?.[token];
@@ -106,7 +123,7 @@ async function startEngine(
 
         if (candidate != null) {
             try {
-                unwrap(candidate.closeEngine());
+                await callBridge((callback) => candidate.closeEngine(callback));
                 unwrap(candidate.shutdown());
                 await runtimeDone;
             } catch {

@@ -9,6 +9,8 @@ import { createWithPlatform, type Platform } from './factory';
 import { createNodeHTTPTransport } from './node_http';
 import type { CreateOptions } from './types';
 
+export { defineModule } from './module';
+
 declare const __filename: string | undefined;
 
 const moduleURL =
@@ -72,15 +74,25 @@ function isRemote(value: string): boolean {
 }
 
 export type {
+    CompileEvent,
     CompileOptions,
+    CompileResultEvent,
+    CompileSource,
     CreateOptions,
     Engine,
     ExecutionOptions,
     HTTPOptions,
+    MaybePromise,
+    ModuleDefinition,
+    ModuleLifecycle,
     Params,
     Plan,
+    PlanEvent,
+    RunEvent,
+    RunResultEvent,
     RuntimeFunction,
     Session,
+    SessionEvent,
     SessionOptions,
     SessionRunOptions,
     SourceInput,

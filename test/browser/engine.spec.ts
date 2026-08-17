@@ -18,7 +18,7 @@ test('loads the browser package and executes Ferret', async ({ page }) => {
                 version: engine.version,
                 session: await session.run(),
                 value: await engine.run(
-                    'FOR value IN 1..3 RETURN value * @factor',
+                    'RETURN (FOR value IN 1..3 RETURN value * @factor)',
                     { params: { factor: 2 } },
                 ),
                 http: await engine.run(
@@ -31,8 +31,8 @@ test('loads the browser package and executes Ferret', async ({ page }) => {
     });
 
     expect(result.version).toEqual({
-        self: '2.0.0-alpha.2',
-        ferret: '2.0.0-alpha.34',
+        self: '2.0.0-alpha.6',
+        ferret: '2.0.0-alpha.47',
     });
     expect(result.session).toBe(42);
     expect(result.value).toEqual([2, 4, 6]);
@@ -170,5 +170,54 @@ test('supports host functions and cancellation in a browser', async ({
     expect(result).toEqual({
         value: { wrapped: 'ok' },
         cancellation: 'AbortError',
+    });
+});
+
+test('supports JavaScript modules and async lifecycle hooks', async ({
+    page,
+}) => {
+    await page.goto('/');
+    const result = await page.evaluate(async () => {
+        const modulePath = '/dist/index.js';
+        const { create, defineModule } = await import(modulePath);
+        const events: string[] = [];
+        const engine = await create({
+            modules: [
+                defineModule({
+                    name: 'browser-module',
+                    functions: {
+                        browser_value: () => 'browser-module',
+                    },
+                    lifecycle: {
+                        async onInit() {
+                            await Promise.resolve();
+                            events.push('init');
+                        },
+                        async beforeRun() {
+                            await Promise.resolve();
+                            events.push('beforeRun');
+                        },
+                        async afterRun() {
+                            await Promise.resolve();
+                            events.push('afterRun');
+                        },
+                        async onClose() {
+                            await Promise.resolve();
+                            events.push('close');
+                        },
+                    },
+                }),
+            ],
+        });
+
+        const value = await engine.run('RETURN BROWSER_VALUE()');
+        await engine.close();
+
+        return { value, events };
+    });
+
+    expect(result).toEqual({
+        value: 'browser-module',
+        events: ['init', 'beforeRun', 'afterRun', 'close'],
     });
 });

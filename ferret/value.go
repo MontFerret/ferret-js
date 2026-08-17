@@ -4,7 +4,6 @@ package ferret
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"syscall/js"
@@ -112,6 +111,20 @@ func convertJSObject(input js.Value, seen []js.Value, path string) (any, error) 
 	return out, nil
 }
 
+func freezeObject(object js.Value) js.Value {
+	return js.Global().Get("Object").Call("freeze", object)
+}
+
+func isPlainJSObject(input js.Value) bool {
+	if input.Type() != js.TypeObject || js.Global().Get("Array").Call("isArray", input).Bool() {
+		return false
+	}
+
+	object := js.Global().Get("Object")
+	prototype := object.Call("getPrototypeOf", input)
+	return prototype.IsNull() || prototype.Equal(object.Get("prototype"))
+}
+
 func jsParams(input js.Value) (map[string]any, error) {
 	if input.Type() == js.TypeUndefined || input.Type() == js.TypeNull {
 		return nil, nil
@@ -142,95 +155,12 @@ func invokeRuntimeFunction(ctx context.Context, fn js.Value, args ...runtime.Val
 		jsArgs[index] = value
 	}
 
-	var output js.Value
-	var invokeErr error
-
-	func() {
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				invokeErr = fmt.Errorf("JavaScript function panicked: %v", recovered)
-			}
-		}()
-
-		output = fn.Invoke(jsArgs...)
-	}()
-
-	if invokeErr != nil {
-		return runtime.None, invokeErr
+	output, err := invokeJS(ctx, fn, jsArgs...)
+	if err != nil {
+		return runtime.None, err
 	}
 
-	if output.Type() != js.TypeObject || output.Get("then").Type() != js.TypeFunction {
-		return parseFunctionOutput(output)
-	}
-
-	type settled struct {
-		value runtime.Value
-		err   error
-	}
-
-	result := make(chan settled, 1)
-
-	var success js.Func
-	var rejected js.Func
-
-	success = js.FuncOf(func(_ js.Value, values []js.Value) any {
-		value := js.Undefined()
-
-		if len(values) > 0 {
-			value = values[0]
-		}
-
-		parsed, err := parseFunctionOutput(value)
-
-		select {
-		case result <- settled{value: parsed, err: err}:
-		default:
-		}
-
-		go func() {
-			success.Release()
-			rejected.Release()
-		}()
-
-		return nil
-	})
-
-	rejected = js.FuncOf(func(_ js.Value, values []js.Value) any {
-		message := "JavaScript promise rejected"
-
-		if len(values) > 0 {
-			message = js.Global().Get("String").Invoke(values[0]).String()
-		}
-
-		select {
-		case result <- settled{err: errors.New(message)}:
-		default:
-		}
-
-		go func() {
-			success.Release()
-			rejected.Release()
-		}()
-
-		return nil
-	})
-
-	output.Call("then", success, rejected)
-
-	select {
-	case <-ctx.Done():
-		// A JavaScript Promise cannot be cancelled generically. Keep the Go
-		// runtime alive until it settles so its callbacks can never resume an
-		// already-shut-down WASM instance, but preserve cancellation as the
-		// result observed by the Ferret session.
-		<-result
-		return runtime.None, ctx.Err()
-	case settled := <-result:
-		if ctx.Err() != nil {
-			return runtime.None, ctx.Err()
-		}
-		return settled.value, settled.err
-	}
+	return parseFunctionOutput(output)
 }
 
 func parseFunctionOutput(output js.Value) (runtime.Value, error) {

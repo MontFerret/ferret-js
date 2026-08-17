@@ -6,8 +6,8 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 // @ts-ignore The generated declaration exists only after the build step.
-import { create } from '../dist/index.node.js'
-import pkg from '../package.json'
+import { create } from '../dist/index.node.js';
+import pkg from '../package.json';
 
 let httpServer: Server;
 let httpBaseURL: string;

@@ -1,5 +1,5 @@
-github.com/MontFerret/ferret/v2 v2.0.0-alpha.47 h1:82oo+yZ0MXQeTSeTHfHDQXbd4g+iby8mlGyKmf2bGfc=
-github.com/MontFerret/ferret/v2 v2.0.0-alpha.47/go.mod h1:Q6JfAgOzRi9KNLqgQtPIQ9BNsXeAar2ITmcQ0HI4zgM=
+github.com/MontFerret/ferret/v2 v2.0.0-alpha.48 h1:1ePIkp1MqR72n1gQBceKjKY1s3ghsHZk4+eZI8XXMMI=
+github.com/MontFerret/ferret/v2 v2.0.0-alpha.48/go.mod h1:Q6JfAgOzRi9KNLqgQtPIQ9BNsXeAar2ITmcQ0HI4zgM=
 github.com/antlr4-go/antlr/v4 v4.13.1 h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYWrPrQ=
 github.com/antlr4-go/antlr/v4 v4.13.1/go.mod h1:GKmUxMtwp6ZgGwZSva4eWPC5mS6vUAmOABFgjdkM7Nw=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=

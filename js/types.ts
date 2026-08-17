@@ -41,6 +41,7 @@ export interface ModuleLifecycle {
 
 export interface ModuleDefinition {
     readonly name: string;
+    readonly namespace?: string;
     readonly functions?: Readonly<Record<string, RuntimeFunction>>;
     readonly lifecycle?: Readonly<ModuleLifecycle>;
 }

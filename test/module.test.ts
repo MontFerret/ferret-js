@@ -69,6 +69,30 @@ describe('Ferret JavaScript modules', () => {
             defineModule({ name: 'bad-functions', functions: [] as never }),
         ).toThrow('functions must be a plain JavaScript object');
         expect(() =>
+            defineModule({ name: 'bad-namespace', namespace: null as never }),
+        ).toThrow('namespace must be a string');
+        for (const namespace of [
+            '',
+            '   ',
+            '::TEST',
+            'TEST::',
+            'TEST::::UTILS',
+            'TEST UTILS',
+            '1TEST',
+            'TEST::1UTILS',
+            'TEST::UTILS-NEXT',
+            'TÉST',
+        ]) {
+            expect(() =>
+                defineModule({
+                    name: 'bad-namespace',
+                    namespace,
+                }),
+            ).toThrow(
+                'namespace must contain valid FQL identifier segments separated by "::"',
+            );
+        }
+        expect(() =>
             defineModule({
                 name: 'bad-function',
                 functions: { value: 1 as never },
@@ -94,13 +118,102 @@ describe('Ferret JavaScript modules', () => {
             'modules must be an array',
         );
         await expect(
-            create({ modules: [{ name: 'same' }, { name: 'same' }] }),
+            create({
+                modules: [
+                    { name: 'same', namespace: 'FIRST' },
+                    { name: 'same', namespace: 'SECOND' },
+                ],
+            }),
         ).rejects.toThrow('duplicate module name "same"');
+        await expect(
+            create({
+                modules: [{ name: 'direct', namespace: 'INVALID::' }],
+            }),
+        ).rejects.toThrow(
+            'modules[0].namespace must contain valid FQL identifier segments separated by "::"',
+        );
 
         const engine = await create({
             modules: [{ name: 'Case' }, { name: 'case' }],
         });
         await engine.close();
+    });
+
+    it('registers module functions in optional nested namespaces', async () => {
+        const definition: ModuleDefinition = {
+            name: 'telemetry',
+            namespace: 'Observability::Telemetry',
+            functions: {
+                track: (value) => value,
+                'UTIL::flush': () => 'flushed',
+            },
+        };
+        const creating = create({ modules: [definition] });
+
+        (definition as { namespace?: string }).namespace = 'MUTATED';
+
+        const engine = await creating;
+        try {
+            await expect(
+                engine.run('RETURN oBsErVaBiLiTy::tElEmEtRy::TrAcK("event")'),
+            ).resolves.toBe('event');
+            await expect(
+                engine.run('RETURN OBSERVABILITY::TELEMETRY::UTIL::FLUSH()'),
+            ).resolves.toBe('flushed');
+            await expect(engine.run('RETURN TRACK("event")')).rejects.toThrow();
+            await expect(
+                engine.run('RETURN MUTATED::TRACK("event")'),
+            ).rejects.toThrow();
+        } finally {
+            await engine.close();
+        }
+    });
+
+    it('separates module identity from effective FQL function identity', async () => {
+        const engine = await create({
+            functions: {
+                track: () => 'root',
+            },
+            modules: [
+                {
+                    name: 'analytics',
+                    namespace: 'ANALYTICS',
+                    functions: { track: () => 'analytics' },
+                },
+                {
+                    name: 'telemetry',
+                    namespace: 'TELEMETRY',
+                    functions: { track: () => 'telemetry' },
+                },
+            ],
+        });
+
+        try {
+            await expect(
+                engine.run(
+                    'RETURN [TRACK(), ANALYTICS::TRACK(), TELEMETRY::TRACK()]',
+                ),
+            ).resolves.toEqual(['root', 'analytics', 'telemetry']);
+        } finally {
+            await engine.close();
+        }
+
+        await expect(
+            create({
+                modules: [
+                    {
+                        name: 'first',
+                        namespace: 'Base',
+                        functions: { 'Util::value': () => 1 },
+                    },
+                    {
+                        name: 'second',
+                        namespace: 'BASE::UTIL',
+                        functions: { VALUE: () => 2 },
+                    },
+                ],
+            }),
+        ).rejects.toThrow('already exists');
     });
 
     it('uses Ferret canonical conflict semantics across registrations', async () => {
@@ -292,6 +405,7 @@ describe('Ferret JavaScript modules', () => {
                 modules: [
                     {
                         name: 'initialization',
+                        namespace: 'NAMESPACED',
                         lifecycle: {
                             async onInit() {
                                 initEvents.push('init');

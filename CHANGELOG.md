@@ -9,6 +9,8 @@
 - Added declarative JavaScript modules through `defineModule()` and
   `create({ modules })`, including asynchronous engine, plan, and session
   lifecycle hooks.
+- Added optional FQL namespaces for JavaScript module functions while keeping
+  module registration identity independent.
 
 ### Changed
 

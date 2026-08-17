@@ -36,6 +36,7 @@ type (
 		lifecycle map[string]js.Value
 		functions []jsFunction
 		name      string
+		namespace []string
 	}
 
 	compileMetadata struct {
@@ -85,6 +86,11 @@ func parseModuleDefinitions(functions, modules js.Value) ([]module.Module, error
 		}
 		names[name] = struct{}{}
 
+		namespace, err := parseNamespace(definition.Get("namespace"), path+".namespace")
+		if err != nil {
+			return nil, err
+		}
+
 		moduleFunctions, err := parseFunctions(definition.Get("functions"), path+".functions")
 		if err != nil {
 			return nil, err
@@ -97,6 +103,7 @@ func parseModuleDefinitions(functions, modules js.Value) ([]module.Module, error
 
 		parsed = append(parsed, &jsModule{
 			name:      name,
+			namespace: namespace,
 			functions: moduleFunctions,
 			lifecycle: lifecycle,
 		})
@@ -142,6 +149,52 @@ func parseFunctions(input js.Value, path string) ([]jsFunction, error) {
 	return functions, nil
 }
 
+func parseNamespace(input js.Value, path string) ([]string, error) {
+	if input.Type() == js.TypeUndefined {
+		return nil, nil
+	}
+
+	if input.Type() != js.TypeString {
+		return nil, fmt.Errorf("%s must be a string", path)
+	}
+
+	segments := strings.Split(input.String(), runtime.NamespaceSeparator)
+	for _, segment := range segments {
+		if !isFQLIdentifier(segment) {
+			return nil, fmt.Errorf(
+				"%s must contain valid FQL identifier segments separated by %q",
+				path,
+				runtime.NamespaceSeparator,
+			)
+		}
+	}
+
+	return segments, nil
+}
+
+func isFQLIdentifier(value string) bool {
+	if len(value) == 0 || !isASCIILetter(value[0]) {
+		return false
+	}
+
+	for index := 1; index < len(value); index++ {
+		char := value[index]
+		if !isASCIILetter(char) && !isASCIIDigit(char) && char != '_' {
+			return false
+		}
+	}
+
+	return true
+}
+
+func isASCIILetter(char byte) bool {
+	return char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z'
+}
+
+func isASCIIDigit(char byte) bool {
+	return char >= '0' && char <= '9'
+}
+
 func parseLifecycle(input js.Value, path string) (map[string]js.Value, error) {
 	if input.Type() == js.TypeUndefined || input.Type() == js.TypeNull {
 		return nil, nil
@@ -185,7 +238,12 @@ func (m *jsModule) Register(bootstrap module.Bootstrap) error {
 		return errors.New("module cannot be nil")
 	}
 
-	definitions := bootstrap.Host().Library().Function().Var()
+	var registration runtime.Namespace = bootstrap.Host().Library()
+	for _, segment := range m.namespace {
+		registration = registration.Namespace(segment)
+	}
+
+	definitions := registration.Function().Var()
 	for _, definition := range m.functions {
 		callback := definition.callback
 		definitions.Add(definition.name, func(ctx context.Context, args ...runtime.Value) (runtime.Value, error) {

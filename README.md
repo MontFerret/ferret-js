@@ -108,6 +108,7 @@ import { create, defineModule } from '@montferret/ferret';
 
 const logger = defineModule({
     name: 'logger',
+    namespace: 'APP::LOGGING',
     functions: {
         log: (value) => console.log(value),
     },
@@ -126,6 +127,9 @@ const engine = await create({
 });
 ```
 
+The `log` function is available to FQL as `APP::LOGGING::LOG(...)` and is not
+also registered as a top-level `LOG(...)` function.
+
 Modules can define engine hooks (`onInit`, `onClose`), plan hooks
 (`beforeCompile`, `afterCompile`, `onPlanClose`), and session hooks
 (`beforeRun`, `afterRun`, `onSessionClose`). Every callback may return normally
@@ -139,9 +143,14 @@ Hook ordering follows Ferret Core: initialization and before hooks run in module
 registration order, while after and close hooks run in reverse order.
 
 The `functions` option remains the simpler shorthand when lifecycle callbacks
-are not needed, and it can be used together with modules. Module names identify
-registrations but do not namespace their functions; Ferret function names
-remain case-insensitive.
+are not needed, and it can be used together with modules. A module's `name` is
+its case-sensitive registration and lifecycle identity. The optional
+`namespace` independently places its functions under an FQL namespace and is
+never inferred from `name`; modules that omit it continue to register functions
+at the top level. Namespace and function lookup remain case-insensitive, while
+declared namespace spelling is preserved. Qualified function keys are relative
+to the module namespace, so namespace `APP` with key `LOGGING::WRITE` exposes
+`APP::LOGGING::WRITE(...)`.
 
 ## Values
 

@@ -31,7 +31,7 @@ test('loads the browser package and executes Ferret', async ({ page }) => {
     });
 
     expect(result.version).toEqual({
-        self: '2.0.0-alpha.6',
+        self: '2.0.0-alpha.7',
         ferret: '2.0.0-alpha.47',
     });
     expect(result.session).toBe(42);
@@ -185,6 +185,7 @@ test('supports JavaScript modules and async lifecycle hooks', async ({
             modules: [
                 defineModule({
                     name: 'browser-module',
+                    namespace: 'BROWSER::MODULE',
                     functions: {
                         browser_value: () => 'browser-module',
                     },
@@ -210,7 +211,9 @@ test('supports JavaScript modules and async lifecycle hooks', async ({
             ],
         });
 
-        const value = await engine.run('RETURN BROWSER_VALUE()');
+        const value = await engine.run(
+            'RETURN BROWSER::MODULE::BROWSER_VALUE()',
+        );
         await engine.close();
 
         return { value, events };

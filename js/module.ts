@@ -49,6 +49,9 @@ export function snapshotModules(
 
         return {
             name: definition.name,
+            ...(definition.namespace === undefined
+                ? {}
+                : { namespace: definition.namespace }),
             ...(definition.functions === undefined
                 ? {}
                 : { functions: snapshotFunctions(definition.functions) }),
@@ -72,6 +75,18 @@ function validateModuleDefinition(
         definition.name.trim().length === 0
     ) {
         throw new TypeError(`${path}.name must be a non-empty string`);
+    }
+
+    if (definition.namespace !== undefined) {
+        if (typeof definition.namespace !== 'string') {
+            throw new TypeError(`${path}.namespace must be a string`);
+        }
+
+        if (!isFQLNamespace(definition.namespace)) {
+            throw new TypeError(
+                `${path}.namespace must contain valid FQL identifier segments separated by "::"`,
+            );
+        }
     }
 
     if (
@@ -160,4 +175,35 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
     const prototype = Object.getPrototypeOf(value);
     return prototype === Object.prototype || prototype === null;
+}
+
+function isFQLNamespace(value: string): boolean {
+    if (value.length === 0) {
+        return false;
+    }
+
+    return value.split('::').every(isFQLIdentifier);
+}
+
+function isFQLIdentifier(value: string): boolean {
+    if (value.length === 0 || !isASCIILetter(value.charCodeAt(0))) {
+        return false;
+    }
+
+    for (let index = 1; index < value.length; index++) {
+        const code = value.charCodeAt(index);
+        if (!isASCIILetter(code) && !isASCIIDigit(code) && code !== 0x5f) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function isASCIILetter(code: number): boolean {
+    return (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a);
+}
+
+function isASCIIDigit(code: number): boolean {
+    return code >= 0x30 && code <= 0x39;
 }

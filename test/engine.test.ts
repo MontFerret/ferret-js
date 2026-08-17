@@ -6,7 +6,8 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 // @ts-ignore The generated declaration exists only after the build step.
-import { create } from '../dist/index.node.js';
+import { create } from '../dist/index.node.js'
+import pkg from '../package.json'
 
 let httpServer: Server;
 let httpBaseURL: string;
@@ -73,8 +74,8 @@ describe('Ferret WASM v2', () => {
         const engine = await create();
         try {
             expect(engine.version).toEqual({
-                self: '2.0.0-alpha.2',
-                ferret: '2.0.0-alpha.34',
+                self: pkg.version,
+                ferret: '2.0.0-alpha.47',
             });
             await expect(
                 engine.run('RETURN { value: [1, 2, 3], ok: TRUE }'),

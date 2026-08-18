@@ -3,6 +3,7 @@ import { createBrowserHTTPTransport } from './browser_http';
 import type { CreateOptions } from './types';
 
 export { defineModule } from './module';
+export { capabilities } from './capabilities';
 
 const moduleURL = import.meta.url;
 const platform: Platform = {
@@ -65,3 +66,38 @@ export type {
     SourceInput,
     Version,
 } from './types';
+
+export type {
+    Appendable,
+    CapabilitySymbols,
+    Clearable,
+    Cloneable,
+    Comparable,
+    Containable,
+    Dispatchable,
+    DispatchEvent,
+    Equatable,
+    FerretCollection,
+    FerretList,
+    FerretMap,
+    Hashable,
+    HostQuery,
+    IndexInsertable,
+    IndexReadable,
+    IndexRemovable,
+    IndexWritable,
+    KeyReadable,
+    KeyRemovable,
+    KeyWritable,
+    Measurable,
+    Observable,
+    ObservableResult,
+    Queryable,
+    QueryResult,
+    Serializable,
+    Sortable,
+    Spawnable,
+    Subscription,
+    Swappable,
+    ValueRemovable,
+} from './capabilities';

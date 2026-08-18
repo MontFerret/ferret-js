@@ -31,7 +31,7 @@ test('loads the browser package and executes Ferret', async ({ page }) => {
     });
 
     expect(result.version).toEqual({
-        self: '2.0.0-alpha.7',
+        self: '2.0.0-alpha.8',
         ferret: '2.0.0-alpha.47',
     });
     expect(result.session).toBe(42);
@@ -222,5 +222,62 @@ test('supports JavaScript modules and async lifecycle hooks', async ({
     expect(result).toEqual({
         value: 'browser-module',
         events: ['init', 'beforeRun', 'afterRun', 'close'],
+    });
+});
+
+test('supports capability host values in the browser entrypoint', async ({
+    page,
+}) => {
+    await page.goto('/');
+    const result = await page.evaluate(async () => {
+        const modulePath = '/dist/index.js';
+        const { capabilities, create } = await import(modulePath);
+        class RemoteMap {
+            readonly data = new Map<unknown, unknown>([['answer', 42]]);
+
+            async [capabilities.keyReadable](key: unknown) {
+                await Promise.resolve();
+                return this.data.has(key) ? this.data.get(key) : undefined;
+            }
+
+            [capabilities.keyWritable](key: unknown, value: unknown) {
+                this.data.set(key, value);
+            }
+
+            [capabilities.keyRemovable](key: unknown) {
+                this.data.delete(key);
+            }
+
+            [capabilities.measurable]() {
+                return this.data.size;
+            }
+
+            [capabilities.spawnable]() {
+                return new RemoteMap();
+            }
+
+            [Symbol.iterator]() {
+                return this.data.entries();
+            }
+        }
+
+        const value = new RemoteMap();
+        const engine = await create();
+        try {
+            return await engine.run(
+                `LET value = @value
+                 value.extra = 1
+                 RETURN { answer: value.answer, length: LENGTH(value), value }`,
+                { params: { value } },
+            );
+        } finally {
+            await engine.close();
+        }
+    });
+
+    expect(result).toEqual({
+        answer: 42,
+        length: 2,
+        value: { answer: 42, extra: 1 },
     });
 });

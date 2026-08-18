@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added symbol-based JavaScript host values, including atomic and composite
+  Ferret capability protocols, synchronous and asynchronous iteration, stable
+  object identity, runtime integration, and explicit output serialization.
 - Added an explicit `http.allowLocalhost` engine option for trusted loopback
   access while preserving Ferret's secure HTTP defaults.
 - Added declarative JavaScript modules through `defineModule()` and

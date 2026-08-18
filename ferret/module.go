@@ -37,6 +37,7 @@ type (
 		functions []jsFunction
 		name      string
 		namespace []string
+		registry  *hostRegistry
 	}
 
 	compileMetadata struct {
@@ -47,7 +48,7 @@ type (
 	compileMetadataKey struct{}
 )
 
-func parseModuleDefinitions(functions, modules js.Value) ([]module.Module, error) {
+func parseModuleDefinitions(registry *hostRegistry, functions, modules js.Value) ([]module.Module, error) {
 	parsed := make([]module.Module, 0)
 
 	shorthand, err := parseFunctions(functions, "functions")
@@ -56,7 +57,7 @@ func parseModuleDefinitions(functions, modules js.Value) ([]module.Module, error
 	}
 
 	if len(shorthand) > 0 {
-		parsed = append(parsed, &jsModule{name: shorthandModuleName, functions: shorthand})
+		parsed = append(parsed, &jsModule{name: shorthandModuleName, functions: shorthand, registry: registry})
 	}
 
 	if modules.Type() == js.TypeUndefined || modules.Type() == js.TypeNull {
@@ -106,6 +107,7 @@ func parseModuleDefinitions(functions, modules js.Value) ([]module.Module, error
 			namespace: namespace,
 			functions: moduleFunctions,
 			lifecycle: lifecycle,
+			registry:  registry,
 		})
 	}
 
@@ -247,7 +249,7 @@ func (m *jsModule) Register(bootstrap module.Bootstrap) error {
 	for _, definition := range m.functions {
 		callback := definition.callback
 		definitions.Add(definition.name, func(ctx context.Context, args ...runtime.Value) (runtime.Value, error) {
-			return invokeRuntimeFunction(ctx, callback, args...)
+			return invokeRuntimeFunction(ctx, m.registry, callback, args...)
 		})
 	}
 

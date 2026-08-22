@@ -42,7 +42,6 @@ type (
 		sessions     map[string]*sessionHandle
 		methods      []js.Func
 		version      Version
-		registry     *hostRegistry
 		nextID       atomic.Uint64
 		shutdown     func()
 		closing      bool
@@ -58,7 +57,6 @@ func NewBridge(version Version, shutdown func()) *Bridge {
 		sessions: make(map[string]*sessionHandle),
 		version:  version,
 		shutdown: sync.OnceFunc(shutdown),
-		registry: newHostRegistry(),
 	}
 }
 
@@ -101,7 +99,7 @@ func (b *Bridge) initialize(_ js.Value, args []js.Value) any {
 		return failure(errors.New("callback must be callable"))
 	}
 
-	registered, err := parseModuleDefinitions(b.registry, args[0], args[1])
+	registered, err := parseModuleDefinitions(args[0], args[1])
 	if err != nil {
 		return failure(err)
 	}
@@ -284,7 +282,7 @@ func (b *Bridge) createSession(_ js.Value, args []js.Value) any {
 		return failure(errors.New("callback must be callable"))
 	}
 
-	parsed, err := jsParams(b.registry, params)
+	parsed, err := jsParams(params)
 	if err != nil {
 		return failure(fmt.Errorf("convert params: %w", err))
 	}
@@ -659,7 +657,6 @@ func (b *Bridge) closeEngine(_ js.Value, args []js.Value) any {
 		clear(b.plans)
 		clear(b.sessions)
 		b.mu.Unlock()
-		b.registry.close()
 
 		invoke(callback, resultFromError(closeErr))
 	}()

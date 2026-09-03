@@ -75,7 +75,7 @@ describe('Ferret WASM v2', () => {
         try {
             expect(engine.version).toEqual({
                 self: pkg.version,
-                ferret: '2.0.0-alpha.47',
+                ferret: '2.0.0-alpha.51',
             });
             await expect(
                 engine.run('RETURN { value: [1, 2, 3], ok: TRUE }'),

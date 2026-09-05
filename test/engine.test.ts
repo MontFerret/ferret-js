@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 // @ts-ignore The generated declaration exists only after the build step.
 import { create } from '../dist/index.node.js';
-import pkg from '../package.json';
+import { expectedVersions } from './versions';
 
 let httpServer: Server;
 let httpBaseURL: string;
@@ -73,10 +73,7 @@ describe('Ferret WASM v2', () => {
     it('reports exact versions and executes JSON-compatible results', async () => {
         const engine = await create();
         try {
-            expect(engine.version).toEqual({
-                self: pkg.version,
-                ferret: '2.0.0-alpha.47',
-            });
+            expect(engine.version).toEqual(expectedVersions);
             await expect(
                 engine.run('RETURN { value: [1, 2, 3], ok: TRUE }'),
             ).resolves.toEqual({ value: [1, 2, 3], ok: true });

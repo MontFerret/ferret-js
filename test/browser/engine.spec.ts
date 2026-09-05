@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { expectedVersions } from '../versions';
+
 test('loads the browser package and executes Ferret', async ({ page }) => {
     await page.goto('/');
     const result = await page.evaluate(async () => {
@@ -30,10 +32,7 @@ test('loads the browser package and executes Ferret', async ({ page }) => {
         }
     });
 
-    expect(result.version).toEqual({
-        self: '2.0.0-alpha.7',
-        ferret: '2.0.0-alpha.47',
-    });
+    expect(result.version).toEqual(expectedVersions);
     expect(result.session).toBe(42);
     expect(result.value).toEqual([2, 4, 6]);
     expect(result.http).toBe('YnJvd3Nlcg==');

@@ -55,20 +55,7 @@ jobs:
               run: |
                   go get "github.com/MontFerret/ferret/v2@${FERRET_VERSION}"
                   go mod tidy
-                  ferret_test_version="${FERRET_VERSION#v}"
-                  version_pattern="^[[:space:]]*ferret: '2[.][0-9]+[.][0-9]+(-[0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?([+][0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?',"
-
-                  for test_file in test/engine.test.ts test/browser/engine.spec.ts; do
-                    match_count="$(grep -Ec "$version_pattern" "$test_file" || true)"
-                    if [[ "$match_count" -ne 1 ]]; then
-                      echo "::error title=Unexpected Ferret version assertion::Expected exactly one Ferret version assertion in ${test_file}, found ${match_count}."
-                      exit 1
-                    fi
-
-                    sed -E -i "s|^([[:space:]]*ferret: ')[^']+(',)|\1${ferret_test_version}\2|" "$test_file"
-                  done
-
-                  dependency_files=(go.mod go.sum test/engine.test.ts test/browser/engine.spec.ts)
+                  dependency_files=(go.mod go.sum)
                   git add -- "${dependency_files[@]}"
 
                   if git diff --cached --quiet -- "${dependency_files[@]}"; then

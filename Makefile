@@ -1,7 +1,6 @@
 PACKAGE_VERSION ?= $(shell sh scripts/versions.sh package)
 FERRET_VERSION = $(shell sh scripts/versions.sh ferret)
 DIST := ./dist
-GO_CACHE ?= /tmp/ferret-go-cache
 
 .PHONY: build clean fmt install js test test-browser test-go wasm
 
@@ -19,7 +18,7 @@ js:
 
 wasm:
 	mkdir -p $(DIST)
-	GOCACHE=$(GO_CACHE) GOOS=js GOARCH=wasm go build -trimpath \
+	GOOS=js GOARCH=wasm go build -trimpath \
 		-ldflags "-s -w -X main.version=$(PACKAGE_VERSION) -X main.ferretVersion=$(FERRET_VERSION)" \
 		-o $(DIST)/ferret.wasm .
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" $(DIST)/wasm_exec.js
@@ -31,7 +30,7 @@ test-browser: build
 	npm run test:browser
 
 test-go:
-	GOCACHE=$(GO_CACHE) GOOS=js GOARCH=wasm go test \
+	GOOS=js GOARCH=wasm go test \
 		-exec="$$(go env GOROOT)/lib/wasm/go_js_wasm_exec" ./...
 
 fmt:

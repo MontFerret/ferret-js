@@ -6,7 +6,7 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const versionsScript = resolve(repositoryRoot, 'scripts/versions.sh');
 
 const readVersion = (target: 'package' | 'ferret'): string =>
-    execFileSync(versionsScript, [target], {
+    execFileSync('sh', [versionsScript, target], {
         cwd: repositoryRoot,
         encoding: 'utf8',
     }).trim();

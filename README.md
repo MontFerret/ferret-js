@@ -16,7 +16,7 @@ npm install @montferret/ferret
 
 - Node.js 22 or newer
 - A modern browser with WebAssembly, `fetch`, and `crypto.getRandomValues`
-- Go 1.25 or newer when building from source
+- Go 1.26 or newer when building from source
 
 ## Quick start
 

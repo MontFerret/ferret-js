@@ -1,7 +1,7 @@
 github.com/MontFerret/api v1.0.0-alpha.19 h1:zRAb2rAMFxhKggmVTEEQfWxfaSz6+p5D6b+C5P/RXZw=
 github.com/MontFerret/api v1.0.0-alpha.19/go.mod h1:wz5bfUIGYkED8Hqz9CdsW0o2jSgagotbVLOCbHHacSI=
-github.com/MontFerret/ferret/v2 v2.0.0-alpha.55 h1:ylh5oXP8smLSo9P40a52bOQWBF9kk8EAIe6/atWWsck=
-github.com/MontFerret/ferret/v2 v2.0.0-alpha.55/go.mod h1:wjyA9O+zZHXn5+izgqOhuhkdHk9irwL8YsUKPCRRNRk=
+github.com/MontFerret/ferret/v2 v2.0.0-alpha.56 h1:CBBWg2om+Nxw04W8hU0duMtAQUtY5NEmtdMP88h6hAY=
+github.com/MontFerret/ferret/v2 v2.0.0-alpha.56/go.mod h1:wjyA9O+zZHXn5+izgqOhuhkdHk9irwL8YsUKPCRRNRk=
 github.com/antlr4-go/antlr/v4 v4.13.1 h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYWrPrQ=
 github.com/antlr4-go/antlr/v4 v4.13.1/go.mod h1:GKmUxMtwp6ZgGwZSva4eWPC5mS6vUAmOABFgjdkM7Nw=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=

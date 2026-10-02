@@ -2,10 +2,10 @@ module github.com/MontFerret/ferret-js
 
 go 1.26
 
-require github.com/MontFerret/ferret/v2 v2.0.0-alpha.56
+require github.com/MontFerret/ferret/v2 v2.0.0-alpha.57
 
 require (
-	github.com/MontFerret/api v1.0.0-alpha.19 // indirect
+	github.com/MontFerret/api v1.0.0-alpha.20 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/gobwas/glob v1.0.0 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect

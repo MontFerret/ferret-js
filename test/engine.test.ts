@@ -75,7 +75,7 @@ describe('Ferret WASM v2', () => {
         try {
             expect(engine.version).toEqual(expectedVersions);
             await expect(
-                engine.run('RETURN { value: [1, 2, 3], ok: TRUE }'),
+                engine.runJSON('RETURN { value: [1, 2, 3], ok: TRUE }'),
             ).resolves.toEqual({ value: [1, 2, 3], ok: true });
         } finally {
             await engine.close();
@@ -92,7 +92,7 @@ describe('Ferret WASM v2', () => {
         expect(plan.closed).toBe(false);
         expect(plan.params).toEqual(['factor']);
 
-        await expect(plan.run({ params: { factor: 3 } })).resolves.toBe(6);
+        await expect(plan.runJSON({ params: { factor: 3 } })).resolves.toBe(6);
 
         const sessionPromise = plan.createSession({
             params: { factor: 4 },
@@ -100,8 +100,8 @@ describe('Ferret WASM v2', () => {
         expect(sessionPromise).toBeInstanceOf(Promise);
         const session = await sessionPromise;
         expect(session.closed).toBe(false);
-        await expect(session.run()).resolves.toBe(8);
-        await expect(session.run()).resolves.toBe(8);
+        await expect(session.runJSON()).resolves.toBe(8);
+        await expect(session.runJSON()).resolves.toBe(8);
 
         await session.close();
         expect(session.closed).toBe(true);
@@ -110,7 +110,7 @@ describe('Ferret WASM v2', () => {
         await engine.close();
         expect(engine.closed).toBe(true);
         await engine.close();
-        await expect(session.run()).rejects.toThrow('Session is closed');
+        await expect(session.runJSON()).rejects.toThrow('Session is closed');
     });
 
     it('binds canonical synchronous and asynchronous host functions', async () => {
@@ -128,15 +128,17 @@ describe('Ferret WASM v2', () => {
         });
         try {
             await expect(
-                engine.run("RETURN ECHO({ value: ['a', 2] })"),
+                engine.runJSON("RETURN ECHO({ value: ['a', 2] })"),
             ).resolves.toEqual({ value: ['a', 2] });
-            await expect(engine.run('RETURN ASYNC_VALUE()')).resolves.toEqual({
+            await expect(
+                engine.runJSON('RETURN ASYNC_VALUE()'),
+            ).resolves.toEqual({
                 nested: ['ok', 'AQID'],
             });
-            await expect(engine.run('RETURN CUSTOM::VALUE()')).resolves.toBe(
-                'namespaced',
-            );
-            await expect(engine.run('RETURN FAIL()')).rejects.toThrow(
+            await expect(
+                engine.runJSON('RETURN CUSTOM::VALUE()'),
+            ).resolves.toBe('namespaced');
+            await expect(engine.runJSON('RETURN FAIL()')).rejects.toThrow(
                 'host failure',
             );
         } finally {
@@ -169,7 +171,9 @@ describe('Ferret WASM v2', () => {
         const requestsBefore = valueRequests;
         try {
             await expect(
-                engine.run(`RETURN IO::NET::HTTP::GET('${httpBaseURL}/value')`),
+                engine.runJSON(
+                    `RETURN IO::NET::HTTP::GET('${httpBaseURL}/value')`,
+                ),
             ).rejects.toThrow('localhost is not allowed');
             expect(valueRequests).toBe(requestsBefore);
         } finally {
@@ -181,15 +185,17 @@ describe('Ferret WASM v2', () => {
         const engine = await create({ http: { allowLocalhost: true } });
         try {
             await expect(
-                engine.run(`RETURN IO::NET::HTTP::GET('${httpBaseURL}/value')`),
+                engine.runJSON(
+                    `RETURN IO::NET::HTTP::GET('${httpBaseURL}/value')`,
+                ),
             ).resolves.toBe('bm9kZQ==');
             await expect(
-                engine.run(
+                engine.runJSON(
                     `RETURN IO::NET::HTTP::GET('${httpBaseURL}/redirect')`,
                 ),
             ).resolves.toBe('bm9kZQ==');
             await expect(
-                engine.run(
+                engine.runJSON(
                     `RETURN IO::NET::HTTP::GET('${httpBaseURL}/blocked-redirect')`,
                 ),
             ).rejects.toThrow('not allowed');
@@ -202,7 +208,7 @@ describe('Ferret WASM v2', () => {
         const engine = await create({ http: { allowLocalhost: true } });
         try {
             const controller = new AbortController();
-            const pending = engine.run(
+            const pending = engine.runJSON(
                 `RETURN IO::NET::HTTP::GET('${httpBaseURL}/slow')`,
                 { signal: controller.signal },
             );
@@ -212,7 +218,7 @@ describe('Ferret WASM v2', () => {
             });
 
             await expect(
-                engine.run(
+                engine.runJSON(
                     `RETURN IO::NET::HTTP::GET('${httpBaseURL}/oversized')`,
                 ),
             ).rejects.toThrow('response body exceeds limit');
@@ -233,9 +239,9 @@ describe('Ferret WASM v2', () => {
         const plan = await engine.compile('RETURN SLOW()');
         const session = await plan.createSession();
         const controller = new AbortController();
-        const running = session.run({ signal: controller.signal });
+        const running = session.runJSON({ signal: controller.signal });
 
-        await expect(session.run()).rejects.toThrow('already running');
+        await expect(session.runJSON()).rejects.toThrow('already running');
         await expect(session.close()).rejects.toThrow('running session');
         await expect(engine.close()).rejects.toThrow('running session');
 
@@ -252,8 +258,12 @@ describe('Ferret WASM v2', () => {
             create({ functions: { VALUE: () => 'second' } }),
         ]);
         try {
-            await expect(first.run('RETURN VALUE()')).resolves.toBe('first');
-            await expect(second.run('RETURN VALUE()')).resolves.toBe('second');
+            await expect(first.runJSON('RETURN VALUE()')).resolves.toBe(
+                'first',
+            );
+            await expect(second.runJSON('RETURN VALUE()')).resolves.toBe(
+                'second',
+            );
         } finally {
             await Promise.all([first.close(), second.close()]);
         }
@@ -265,11 +275,11 @@ describe('Ferret WASM v2', () => {
             const cyclic: Record<string, unknown> = {};
             cyclic.self = cyclic;
             await expect(
-                engine.run('RETURN @value', {
+                engine.runJSON('RETURN @value', {
                     params: { value: cyclic },
                 }),
             ).rejects.toThrow('cyclic JavaScript value');
-            await expect(engine.run('RETURN MISSING()')).rejects.toThrow(
+            await expect(engine.runJSON('RETURN MISSING()')).rejects.toThrow(
                 'unresolved function',
             );
         } finally {
@@ -287,8 +297,8 @@ describe('Ferret WASM v2', () => {
         expect(engine.closed).toBe(true);
         expect(plan.closed).toBe(true);
         expect(session.closed).toBe(true);
-        await expect(session.run()).rejects.toThrow('Session is closed');
-        await expect(plan.run()).rejects.toThrow('Plan is closed');
+        await expect(session.runJSON()).rejects.toThrow('Session is closed');
+        await expect(plan.runJSON()).rejects.toThrow('Plan is closed');
         await expect(engine.compile('RETURN TRUE')).rejects.toThrow(
             'Engine is closed',
         );
@@ -301,7 +311,7 @@ describe('Ferret WASM v2', () => {
         };
         const engine = await commonjs.create();
         try {
-            await expect(engine.run('RETURN 42')).resolves.toBe(42);
+            await expect(engine.runJSON('RETURN 42')).resolves.toBe(42);
         } finally {
             await engine.close();
         }
@@ -315,7 +325,7 @@ describe('Ferret WASM v2', () => {
             wasm: new Uint8Array(bytes),
         });
         try {
-            await expect(engine.run('RETURN 21 * 2')).resolves.toBe(42);
+            await expect(engine.runJSON('RETURN 21 * 2')).resolves.toBe(42);
         } finally {
             await engine.close();
         }

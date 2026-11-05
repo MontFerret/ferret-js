@@ -10,6 +10,7 @@ import { createNodeHTTPTransport } from './node_http';
 import type { CreateOptions } from './types';
 
 export { defineModule } from './module';
+export { OutputError } from './output';
 
 declare const __filename: string | undefined;
 
@@ -79,6 +80,11 @@ export type {
     CompileResultEvent,
     CompileSource,
     CreateOptions,
+    Content,
+    Metadata,
+    Output,
+    OutputConsumer,
+    OutputOptions,
     Engine,
     ExecutionOptions,
     HTTPOptions,

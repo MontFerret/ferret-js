@@ -45,7 +45,7 @@ describe('Ferret JavaScript modules', () => {
 
         try {
             await expect(
-                engine.run(
+                engine.runJSON(
                     'RETURN { hello: HELLO("Ferret"), answer: ANSWER(), shorthand: SHORTHAND() }',
                 ),
             ).resolves.toEqual({
@@ -155,14 +155,20 @@ describe('Ferret JavaScript modules', () => {
         const engine = await creating;
         try {
             await expect(
-                engine.run('RETURN oBsErVaBiLiTy::tElEmEtRy::TrAcK("event")'),
+                engine.runJSON(
+                    'RETURN oBsErVaBiLiTy::tElEmEtRy::TrAcK("event")',
+                ),
             ).resolves.toBe('event');
             await expect(
-                engine.run('RETURN OBSERVABILITY::TELEMETRY::UTIL::FLUSH()'),
+                engine.runJSON(
+                    'RETURN OBSERVABILITY::TELEMETRY::UTIL::FLUSH()',
+                ),
             ).resolves.toBe('flushed');
-            await expect(engine.run('RETURN TRACK("event")')).rejects.toThrow();
             await expect(
-                engine.run('RETURN MUTATED::TRACK("event")'),
+                engine.runJSON('RETURN TRACK("event")'),
+            ).rejects.toThrow();
+            await expect(
+                engine.runJSON('RETURN MUTATED::TRACK("event")'),
             ).rejects.toThrow();
         } finally {
             await engine.close();
@@ -190,7 +196,7 @@ describe('Ferret JavaScript modules', () => {
 
         try {
             await expect(
-                engine.run(
+                engine.runJSON(
                     'RETURN [TRACK(), ANALYTICS::TRACK(), TELEMETRY::TRACK()]',
                 ),
             ).resolves.toEqual(['root', 'analytics', 'telemetry']);
@@ -309,7 +315,7 @@ describe('Ferret JavaScript modules', () => {
             text: 'RETURN 42',
         });
         const session = await plan.createSession();
-        await expect(session.run()).resolves.toBe(42);
+        await expect(session.runJSON()).resolves.toBe(42);
         await session.close();
         await plan.close();
         const closing = engine.close();
@@ -373,7 +379,7 @@ describe('Ferret JavaScript modules', () => {
         });
         const plan = await engine.compile('RETURN TRUE');
         const session = await plan.createSession();
-        await session.run();
+        await session.runJSON();
         await session.close();
         await plan.close();
         await engine.close();
@@ -463,7 +469,9 @@ describe('Ferret JavaScript modules', () => {
         });
         const plan = await runEngine.compile('RETURN TRUE');
         const session = await plan.createSession();
-        await expect(session.run()).rejects.toThrow(/beforeRun.*run rejected/s);
+        await expect(session.runJSON()).rejects.toThrow(
+            /beforeRun.*run rejected/s,
+        );
         expect(afterRunCalled).toBe(false);
         await runEngine.close();
     });
@@ -525,7 +533,7 @@ describe('Ferret JavaScript modules', () => {
                 },
             ],
         });
-        await expect(runEngine.run('RETURN FAIL()')).rejects.toThrow(
+        await expect(runEngine.runJSON('RETURN FAIL()')).rejects.toThrow(
             /runtime failed.*afterRun.*after run rejected/s,
         );
         expect(runEvent?.error).toBeInstanceOf(Error);

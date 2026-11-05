@@ -31,7 +31,7 @@ test-browser: build
 
 test-go:
 	GOOS=js GOARCH=wasm go test \
-		-exec="$$(go env GOROOT)/lib/wasm/go_js_wasm_exec" ./...
+		-exec="sh \"$(CURDIR)/scripts/test-wasm.sh\" \"$$(go env GOROOT)/lib/wasm/go_js_wasm_exec\"" ./...
 
 fmt:
 	gofmt -w main.go ferret

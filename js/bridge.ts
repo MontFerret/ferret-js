@@ -1,4 +1,10 @@
-import type { ModuleDefinition, RuntimeFunction, Version } from './types';
+import type {
+    Content,
+    Metadata,
+    ModuleDefinition,
+    RuntimeFunction,
+    Version,
+} from './types';
 import type { HTTPTransport } from './http';
 
 export interface BridgeError {
@@ -15,6 +21,18 @@ export interface BridgeResult<T = undefined> {
 export interface CompileResult {
     id: string;
     params: string[];
+}
+
+export interface OutputResult {
+    id: string;
+    metadata: Metadata;
+}
+
+/** A successful bridge call can still carry terminal execution/cleanup errors. */
+export interface OutputCompletion {
+    content: Content | null;
+    error?: BridgeError;
+    closeError?: BridgeError;
 }
 
 export interface GoBridge {
@@ -41,7 +59,22 @@ export interface GoBridge {
     runSession(
         sessionId: string,
         signal: AbortSignal | undefined,
-        callback: (result: BridgeResult<string>) => void,
+        callback: (result: BridgeResult<OutputResult>) => void,
+    ): BridgeResult<undefined>;
+    collectOutput(
+        outputId: string,
+        signal: AbortSignal | undefined,
+        callback: (result: BridgeResult<OutputCompletion>) => void,
+    ): BridgeResult<undefined>;
+    consumeOutput(
+        outputId: string,
+        signal: AbortSignal | undefined,
+        consumer: (chunk: Uint8Array) => Promise<void>,
+        callback: (result: BridgeResult<OutputCompletion>) => void,
+    ): BridgeResult<undefined>;
+    closeOutput(
+        outputId: string,
+        callback: (result: BridgeResult<undefined>) => void,
     ): BridgeResult<undefined>;
     closeSession(
         sessionId: string,
@@ -80,7 +113,10 @@ export function unwrap<T>(result: BridgeResult<T>): T {
         return result.data as T;
     }
 
-    const error = new Error(result?.error?.message ?? 'Unexpected WASM error');
+    const error = Object.assign(
+        new Error(result?.error?.message ?? 'Unexpected WASM error'),
+        { code: result?.error?.code },
+    );
     if (result?.error?.code === 'ABORTED') {
         error.name = 'AbortError';
     }

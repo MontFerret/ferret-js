@@ -3,6 +3,7 @@
 package ferret
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -12,7 +13,7 @@ import (
 	"github.com/MontFerret/ferret/v2/pkg/runtime"
 )
 
-func runtimeValueToJS(value runtime.Value) (js.Value, error) {
+func runtimeValueToJS(ctx context.Context, value runtime.Value) (js.Value, error) {
 	if value == nil || value == runtime.None {
 		return js.Null(), nil
 	}
@@ -23,12 +24,12 @@ func runtimeValueToJS(value runtime.Value) (js.Value, error) {
 		return array, nil
 	}
 
-	encoded, err := encodingjson.Default.Encode(value)
-	if err != nil {
+	var encoded bytes.Buffer
+	if err := encodingjson.Default.Encode(ctx, &encoded, value); err != nil {
 		return js.Undefined(), err
 	}
 
-	return js.Global().Get("JSON").Call("parse", string(encoded)), nil
+	return js.Global().Get("JSON").Call("parse", encoded.String()), nil
 }
 
 func jsValueToGo(input js.Value) (any, error) {
@@ -147,7 +148,7 @@ func invokeRuntimeFunction(ctx context.Context, fn js.Value, args ...runtime.Val
 	jsArgs := make([]any, len(args))
 
 	for index, arg := range args {
-		value, err := runtimeValueToJS(arg)
+		value, err := runtimeValueToJS(ctx, arg)
 		if err != nil {
 			return runtime.None, fmt.Errorf("convert argument %d: %w", index, err)
 		}

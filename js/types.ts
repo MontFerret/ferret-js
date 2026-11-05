@@ -80,9 +80,42 @@ export interface Version {
     ferret: string;
 }
 
+/** Descriptor of the complete encoded payload, independent of consumption. */
+export interface Metadata {
+    readonly contentType: string;
+    readonly length: number;
+    readonly lengthKnown: boolean;
+}
+
+/** Detached bytes owned by the recipient, valid after output or engine closure. */
+export interface Content {
+    readonly metadata: Readonly<Metadata>;
+    readonly data: Uint8Array;
+}
+
+export interface OutputOptions {
+    signal?: AbortSignal;
+}
+
+export type OutputConsumer = (
+    chunk: Uint8Array,
+    signal: AbortSignal,
+) => MaybePromise<void>;
+
+/** Caller-owned, one-shot output. Consume it to observe terminal execution errors. */
+export interface Output {
+    readonly metadata: Readonly<Metadata>;
+    readonly closed: boolean;
+    collect(options?: OutputOptions): Promise<Content | null>;
+    consume(consumer: OutputConsumer, options?: OutputOptions): Promise<void>;
+    json<T = unknown>(options?: OutputOptions): Promise<T | undefined>;
+    close(): Promise<void>;
+}
+
 export interface Session {
     readonly closed: boolean;
-    run<T = unknown>(options?: SessionRunOptions): Promise<T>;
+    run(options?: SessionRunOptions): Promise<Output>;
+    runJSON<T = unknown>(options?: SessionRunOptions): Promise<T | undefined>;
     close(): Promise<void>;
 }
 
@@ -90,7 +123,8 @@ export interface Plan {
     readonly params: readonly string[];
     readonly closed: boolean;
     createSession(options?: SessionOptions): Promise<Session>;
-    run<T = unknown>(options?: ExecutionOptions): Promise<T>;
+    run(options?: ExecutionOptions): Promise<Output>;
+    runJSON<T = unknown>(options?: ExecutionOptions): Promise<T | undefined>;
     close(): Promise<void>;
 }
 
@@ -98,9 +132,10 @@ export interface Engine {
     readonly version: Readonly<Version>;
     readonly closed: boolean;
     compile(source: SourceInput, options?: CompileOptions): Promise<Plan>;
-    run<T = unknown>(
+    run(source: SourceInput, options?: ExecutionOptions): Promise<Output>;
+    runJSON<T = unknown>(
         source: SourceInput,
         options?: ExecutionOptions,
-    ): Promise<T>;
+    ): Promise<T | undefined>;
     close(): Promise<void>;
 }

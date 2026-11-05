@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"syscall/js"
+
+	core "github.com/MontFerret/ferret/v2"
 )
 
 const abortCode = "ABORTED"
@@ -25,18 +27,23 @@ func failure(err error) any {
 		err = errors.New("unexpected error")
 	}
 
+	return map[string]any{"ok": false, "error": errorValue(err)}
+}
+
+func errorValue(err error) any {
+	if err == nil {
+		return nil
+	}
 	code := ""
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	switch {
+	case errors.Is(err, core.ErrOutputClosed):
+		code = "OUTPUT_CLOSED"
+	case errors.Is(err, core.ErrOutputInUse):
+		code = "OUTPUT_IN_USE"
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		code = abortCode
 	}
-
-	return map[string]any{
-		"ok": false,
-		"error": map[string]any{
-			"message": err.Error(),
-			"code":    code,
-		},
-	}
+	return map[string]any{"message": err.Error(), "code": code}
 }
 
 func invoke(callback js.Value, result any) {

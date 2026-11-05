@@ -3,6 +3,7 @@ import { createBrowserHTTPTransport } from './browser_http';
 import type { CreateOptions } from './types';
 
 export { defineModule } from './module';
+export { OutputError } from './output';
 
 const moduleURL = import.meta.url;
 const platform: Platform = {
@@ -46,6 +47,11 @@ export type {
     CompileResultEvent,
     CompileSource,
     CreateOptions,
+    Content,
+    Metadata,
+    Output,
+    OutputConsumer,
+    OutputOptions,
     Engine,
     ExecutionOptions,
     HTTPOptions,

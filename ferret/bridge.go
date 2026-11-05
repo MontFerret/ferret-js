@@ -26,12 +26,13 @@ type (
 	}
 
 	sessionHandle struct {
-		session *core.Session
-		id      string
-		planID  string
-		running bool
-		closing bool
-		closed  bool
+		session  *core.Session
+		id       string
+		planID   string
+		running  bool
+		closing  bool
+		closed   bool
+		outputID string
 	}
 
 	Bridge struct {
@@ -40,6 +41,7 @@ type (
 		network      ferretnet.Network
 		plans        map[string]*planHandle
 		sessions     map[string]*sessionHandle
+		outputs      map[string]*outputHandle
 		methods      []js.Func
 		version      Version
 		nextID       atomic.Uint64
@@ -55,6 +57,7 @@ func NewBridge(version Version, shutdown func()) *Bridge {
 	return &Bridge{
 		plans:    make(map[string]*planHandle),
 		sessions: make(map[string]*sessionHandle),
+		outputs:  make(map[string]*outputHandle),
 		version:  version,
 		shutdown: sync.OnceFunc(shutdown),
 	}
@@ -67,6 +70,9 @@ func (b *Bridge) JSValue() js.Value {
 	b.setMethod(object, "compile", b.compile)
 	b.setMethod(object, "createSession", b.createSession)
 	b.setMethod(object, "runSession", b.runSession)
+	b.setMethod(object, "collectOutput", b.collectOutput)
+	b.setMethod(object, "consumeOutput", b.consumeOutput)
+	b.setMethod(object, "closeOutput", b.closeOutput)
 	b.setMethod(object, "closeSession", b.closeSession)
 	b.setMethod(object, "closePlan", b.closePlan)
 	b.setMethod(object, "closeEngine", b.closeEngine)
@@ -381,6 +387,10 @@ func (b *Bridge) runSession(_ js.Value, args []js.Value) any {
 		b.mu.Unlock()
 		return failure(errors.New("session is already running"))
 	}
+	if _, pending := b.outputs[handle.outputID]; pending {
+		b.mu.Unlock()
+		return failure(errors.New("previous session output must be settled before another run"))
+	}
 
 	handle.running = true
 	session := handle.session
@@ -393,14 +403,18 @@ func (b *Bridge) runSession(_ js.Value, args []js.Value) any {
 				return failure(err)
 			}
 
-			defer cleanup()
-
 			output, runErr := session.Run(ctx)
 			if runErr != nil {
+				cleanup()
 				return failure(fmt.Errorf("run session: %w", runErr))
 			}
 
-			return ok(string(output.Content))
+			outputID := b.newID("output")
+			b.mu.Lock()
+			b.outputs[outputID] = &outputHandle{output: output, ctx: ctx, cleanup: sync.OnceFunc(cleanup)}
+			handle.outputID = outputID
+			b.mu.Unlock()
+			return ok(map[string]any{"id": outputID, "metadata": metadataValue(output.Metadata())})
 		}()
 
 		b.finishRun(id)
@@ -599,6 +613,12 @@ func (b *Bridge) closeEngine(_ js.Value, args []js.Value) any {
 		b.mu.Unlock()
 		return failure(errors.New("cannot close an engine while compiling a plan"))
 	}
+	for _, output := range b.outputs {
+		if output.consuming || output.closing {
+			b.mu.Unlock()
+			return failure(errors.New("cannot close an engine with an active output"))
+		}
+	}
 
 	for _, plan := range b.plans {
 		if plan.pendingSessionCreations > 0 {
@@ -627,6 +647,10 @@ func (b *Bridge) closeEngine(_ js.Value, args []js.Value) any {
 		planIDs = append(planIDs, id)
 	}
 
+	outputs := make(map[string]*outputHandle, len(b.outputs))
+	for id, output := range b.outputs {
+		outputs[id] = output
+	}
 	engine := b.engine
 	network := b.network
 	b.closing = true
@@ -634,6 +658,10 @@ func (b *Bridge) closeEngine(_ js.Value, args []js.Value) any {
 
 	go func() {
 		var closeErr error
+		for id, output := range outputs {
+			closeErr = errors.Join(closeErr, output.output.Close())
+			b.releaseOutput(id, output)
+		}
 		for _, id := range planIDs {
 			plan, sessionIDs, err := b.beginPlanClose(id, true)
 			if err != nil {

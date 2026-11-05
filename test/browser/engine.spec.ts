@@ -18,12 +18,12 @@ test('loads the browser package and executes Ferret', async ({ page }) => {
 
             return {
                 version: engine.version,
-                session: await session.run(),
-                value: await engine.run(
+                session: await session.runJSON(),
+                value: await engine.runJSON(
                     'RETURN (FOR value IN 1..3 RETURN value * @factor)',
                     { params: { factor: 2 } },
                 ),
-                http: await engine.run(
+                http: await engine.runJSON(
                     `RETURN IO::NET::HTTP::GET('${location.origin}/api/value')`,
                 ),
             };
@@ -45,7 +45,7 @@ test('blocks localhost HTTP by default', async ({ page }) => {
         const { create } = await import(modulePath);
         const engine = await create();
         try {
-            await engine.run(
+            await engine.runJSON(
                 `RETURN IO::NET::HTTP::GET('${location.origin}/api/value')`,
             );
             return '';
@@ -70,7 +70,7 @@ test('rejects browser cross-origin HTTP and redirects', async ({ page }) => {
 
         const failure = async (query: string): Promise<string> => {
             try {
-                await engine.run(query);
+                await engine.runJSON(query);
                 return '';
             } catch (error) {
                 return (error as Error).message;
@@ -107,7 +107,7 @@ test('aborts browser HTTP requests', async ({ page }) => {
         });
         try {
             const controller = new AbortController();
-            const pending = engine.run(
+            const pending = engine.runJSON(
                 `RETURN IO::NET::HTTP::GET('${location.origin}/api/slow')`,
                 { signal: controller.signal },
             );
@@ -148,9 +148,9 @@ test('supports host functions and cancellation in a browser', async ({
             },
         });
         try {
-            const value = await engine.run("RETURN VALUE('ok')");
+            const value = await engine.runJSON("RETURN VALUE('ok')");
             const controller = new AbortController();
-            const pending = engine.run('RETURN SLOW()', {
+            const pending = engine.runJSON('RETURN SLOW()', {
                 signal: controller.signal,
             });
             controller.abort();
@@ -210,7 +210,7 @@ test('supports JavaScript modules and async lifecycle hooks', async ({
             ],
         });
 
-        const value = await engine.run(
+        const value = await engine.runJSON(
             'RETURN BROWSER::MODULE::BROWSER_VALUE()',
         );
         await engine.close();
@@ -222,4 +222,66 @@ test('supports JavaScript modules and async lifecycle hooks', async ({
         value: 'browser-module',
         events: ['init', 'beforeRun', 'afterRun', 'close'],
     });
+});
+
+test('exposes detached output handles and deferred failures in a browser', async ({
+    page,
+}) => {
+    await page.goto('/');
+    const result = await page.evaluate(async () => {
+        const { create, OutputError } = await import(
+            '/dist/index.js' as string
+        );
+        const engine = await create({
+            functions: {
+                fail: () => {
+                    throw new Error('browser failure');
+                },
+            },
+        });
+        try {
+            const plan = await engine.compile('RETURN { value: 42 }');
+            const session = await plan.createSession();
+            const output = await session.run();
+            await session.close();
+            await plan.close();
+            const chunks: Uint8Array[] = [];
+            await output.consume(
+                async (chunk: Uint8Array, signal: AbortSignal) => {
+                    if (signal.aborted)
+                        throw new Error('unexpected cancellation');
+                    await Promise.resolve();
+                    chunks.push(chunk);
+                },
+            );
+            const failed = await engine.run('RETURN FAIL()');
+            let failure = '';
+            try {
+                await failed.collect();
+            } catch (error) {
+                if (!(error instanceof OutputError)) throw error;
+                failure = (error as Error).message;
+            }
+            const idle = await engine.run('RETURN 1');
+            await engine.close();
+            return {
+                metadata: output.metadata,
+                text: chunks
+                    .map((chunk) => new TextDecoder().decode(chunk))
+                    .join(''),
+                closed: output.closed && idle.closed,
+                failure,
+            };
+        } finally {
+            await engine.close();
+        }
+    });
+    expect(result.metadata).toEqual({
+        contentType: 'application/json',
+        length: 12,
+        lengthKnown: true,
+    });
+    expect(JSON.parse(result.text)).toEqual({ value: 42 });
+    expect(result.closed).toBe(true);
+    expect(result.failure).toContain('browser failure');
 });

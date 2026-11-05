@@ -1,5 +1,7 @@
 import type { CompileResult, GoBridge } from './bridge';
 import { callBridge, unwrap } from './bridge';
+import { OutputImpl, readOutputJSON } from './output';
+import type { OutputResult } from './bridge';
 import type {
     CompileOptions,
     Engine,
@@ -33,28 +35,34 @@ function normalizeSource(source: SourceInput): { name: string; text: string } {
     return { name: source.name || 'anonymous', text: source.text };
 }
 
-async function runWithCleanup<T>(
-    run: () => Promise<T>,
+async function runWithOutputCleanup(
+    run: () => Promise<OutputImpl>,
     cleanup: () => Promise<void>,
-): Promise<T> {
+): Promise<OutputImpl> {
+    let output: OutputImpl | undefined;
     let runError: unknown;
-
+    let failed = false;
     try {
-        return await run();
+        output = await run();
+        return output;
     } catch (error) {
+        failed = true;
         runError = error;
         throw error;
     } finally {
         try {
             await cleanup();
         } catch (cleanupError) {
-            if (runError !== undefined) {
+            if (output !== undefined) {
+                output.addCleanupError(cleanupError);
+            } else if (failed) {
                 throw new AggregateError(
                     [runError, cleanupError],
                     'Execution and cleanup both failed',
                 );
+            } else {
+                throw cleanupError;
             }
-            throw cleanupError;
         }
     }
 }
@@ -66,6 +74,7 @@ export class SessionImpl implements Session {
     #closed = false;
     #closing = false;
     #running = false;
+    #output?: OutputImpl;
 
     /** @internal */
     constructor(bridge: GoBridge, id: string, owner: PlanImpl) {
@@ -88,7 +97,7 @@ export class SessionImpl implements Session {
         return this.#closed;
     }
 
-    async run<T = unknown>(options: SessionRunOptions = {}): Promise<T> {
+    async run(options: SessionRunOptions = {}): Promise<OutputImpl> {
         if (this.#closed) {
             throw new Error('Session is closed');
         }
@@ -100,25 +109,37 @@ export class SessionImpl implements Session {
         if (this.#running) {
             throw new Error('Session is already running');
         }
-
-        if (
-            options == null ||
-            (options.signal != null &&
-                typeof options.signal.addEventListener !== 'function')
-        ) {
-            throw new TypeError('signal must be an AbortSignal');
+        if (this.#owner.closing || this.#owner.engineClosing) {
+            throw new Error('Plan or engine is closing');
         }
+
+        if (this.#output != null && !this.#output.closed) {
+            throw new Error(
+                'Previous session output must be settled before another run',
+            );
+        }
+        if (options == null || typeof options !== 'object') {
+            throw new TypeError('options must be an object');
+        }
+        validateSignal(options.signal);
 
         this.#running = true;
 
         try {
-            const json = await callBridge<string>((callback) =>
+            const result = await callBridge<OutputResult>((callback) =>
                 this.#bridge.runSession(this.#id, options.signal, callback),
             );
-            return JSON.parse(json) as T;
+            this.#output = this.#owner.registerOutput(result, options.signal);
+            return this.#output;
         } finally {
             this.#running = false;
         }
+    }
+
+    runJSON<T = unknown>(
+        options: SessionRunOptions = {},
+    ): Promise<T | undefined> {
+        return readOutputJSON<T>(this.run(options));
     }
 
     async close(): Promise<void> {
@@ -209,6 +230,11 @@ export class PlanImpl implements Plan {
         return this.#closing;
     }
 
+    /** @internal */
+    get engineClosing(): boolean {
+        return this.#owner.closing;
+    }
+
     get closed(): boolean {
         return this.#closed;
     }
@@ -218,13 +244,21 @@ export class PlanImpl implements Plan {
         this.#sessions.delete(session);
     }
 
+    /** @internal */
+    registerOutput(
+        result: OutputResult,
+        signal: AbortSignal | undefined,
+    ): OutputImpl {
+        return this.#owner.registerOutput(result, signal);
+    }
+
     async createSession(options: SessionOptions = {}): Promise<SessionImpl> {
         if (this.#closed) {
             throw new Error('Plan is closed');
         }
 
-        if (this.#closing) {
-            throw new Error('Plan is closing');
+        if (this.#closing || this.engineClosing) {
+            throw new Error('Plan or engine is closing');
         }
 
         if (
@@ -256,7 +290,7 @@ export class PlanImpl implements Plan {
         }
     }
 
-    async run<T = unknown>(options: ExecutionOptions = {}): Promise<T> {
+    async run(options: ExecutionOptions = {}): Promise<OutputImpl> {
         if (options == null || !isParams(options.params)) {
             throw new TypeError('params must be a plain JavaScript object');
         }
@@ -266,10 +300,16 @@ export class PlanImpl implements Plan {
             signal: options.signal,
         });
 
-        return runWithCleanup(
-            () => session.run<T>({ signal: options.signal }),
+        return runWithOutputCleanup(
+            () => session.run({ signal: options.signal }),
             () => session.close(),
         );
+    }
+
+    runJSON<T = unknown>(
+        options: ExecutionOptions = {},
+    ): Promise<T | undefined> {
+        return readOutputJSON<T>(this.run(options));
     }
 
     async close(): Promise<void> {
@@ -332,6 +372,7 @@ export class EngineImpl implements Engine {
     readonly #bridge: GoBridge;
     readonly #runtimeDone: Promise<void>;
     readonly #plans = new Set<PlanImpl>();
+    readonly #outputs = new Set<OutputImpl>();
     readonly version: Readonly<Version>;
     #closed = false;
     #closing = false;
@@ -353,8 +394,25 @@ export class EngineImpl implements Engine {
         this.#plans.delete(plan);
     }
 
+    /** @internal */
+    get closing(): boolean {
+        return this.#closing;
+    }
+
     get closed(): boolean {
         return this.#closed;
+    }
+
+    /** @internal */
+    registerOutput(
+        result: OutputResult,
+        signal: AbortSignal | undefined,
+    ): OutputImpl {
+        const output = new OutputImpl(this.#bridge, result, signal, () =>
+            this.#outputs.delete(output),
+        );
+        this.#outputs.add(output);
+        return output;
     }
 
     async compile(
@@ -400,17 +458,27 @@ export class EngineImpl implements Engine {
         }
     }
 
-    async run<T = unknown>(
+    async run(
         source: SourceInput,
         options: ExecutionOptions = {},
-    ): Promise<T> {
+    ): Promise<OutputImpl> {
+        if (options == null || !isParams(options.params)) {
+            throw new TypeError('params must be a plain JavaScript object');
+        }
         const plan = await this.compile(source, {
             signal: options.signal,
         });
-        return runWithCleanup(
-            () => plan.run<T>(options),
+        return runWithOutputCleanup(
+            () => plan.run(options),
             () => plan.close(),
         );
+    }
+
+    runJSON<T = unknown>(
+        source: SourceInput,
+        options: ExecutionOptions = {},
+    ): Promise<T | undefined> {
+        return readOutputJSON<T>(this.run(source, options));
     }
 
     async close(): Promise<void> {
@@ -424,6 +492,12 @@ export class EngineImpl implements Engine {
 
         if (this.#pendingCompilations > 0) {
             throw new Error('Cannot close an engine while compiling a plan');
+        }
+
+        for (const output of this.#outputs) {
+            if (output.active) {
+                throw new Error('Cannot close an engine with an active output');
+            }
         }
 
         for (const plan of this.#plans) {
@@ -455,6 +529,15 @@ export class EngineImpl implements Engine {
         let accepted = false;
 
         try {
+            // Reserve every output before yielding, so callbacks cannot start
+            // consuming another unread handle during shutdown.
+            const outputClosures = [...this.#outputs].map((output) =>
+                output.close(),
+            );
+            for (const result of await Promise.allSettled(outputClosures)) {
+                if (result.status === 'rejected') errors.push(result.reason);
+            }
+
             for (const plan of [...this.#plans]) {
                 try {
                     await plan.close();
